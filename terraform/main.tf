@@ -7,7 +7,7 @@ provider "azurerm" {
 # -------------------------
 resource "azurerm_resource_group" "rg" {
   name     = "rg-gitlab"
-  location = "Central US"
+  location = "East US 2"
 }
 
 # -------------------------
