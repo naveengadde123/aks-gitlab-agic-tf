@@ -1,0 +1,18 @@
+global:
+  hosts:
+    domain: example.com
+
+nginx-ingress:
+  enabled: false
+
+certmanager:
+  install: false
+
+prometheus:
+  install: false
+
+grafana:
+  install: false
+
+gitlab-runner:
+  install: false

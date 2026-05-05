@@ -1,0 +1,124 @@
+name: Deploy AKS + GitLab
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve
+
+    - name: Get Terraform Outputs
+      run: |
+        cd terraform
+        echo "POSTGRES_HOST=$(terraform output -raw postgres_host)" >> $GITHUB_ENV
+        echo "REDIS_HOST=$(terraform output -raw redis_host)" >> $GITHUB_ENV
+        echo "REDIS_KEY=$(terraform output -raw redis_key)" >> $GITHUB_ENV
+        echo "STORAGE_ACCOUNT=$(terraform output -raw storage_account)" >> $GITHUB_ENV
+        echo "STORAGE_KEY=$(terraform output -raw storage_key)" >> $GITHUB_ENV
+
+    - name: Get AKS Credentials
+      run: |
+        az aks get-credentials --resource-group rg-aks-gitlab --name aks-gitlab --overwrite-existing
+
+    - name: Create Namespace
+      run: kubectl create namespace gitlab || true
+
+    - name: Create Kubernetes Secrets
+      run: |
+        kubectl create secret generic gitlab-postgres-secret \
+          --from-literal=password=StrongPass@123 \
+          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+
+        kubectl create secret generic gitlab-redis-secret \
+          --from-literal=password=$REDIS_KEY \
+          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Install Helm
+      run: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Add GitLab Repo
+      run: |
+        helm repo add gitlab https://charts.gitlab.io
+        helm repo update
+
+    - name: Generate values.yaml
+      run: |
+        cat <<EOF > values.yaml
+        global:
+          edition: ce
+
+          hosts:
+            domain: gitlab.example.com
+
+          ingress:
+            class: azure/application-gateway
+
+          psql:
+            host: $POSTGRES_HOST
+            port: 5432
+            username: gitlabadmin
+            database: gitlabhq_production
+            password:
+              secret: gitlab-postgres-secret
+              key: password
+
+          redis:
+            host: $REDIS_HOST
+            port: 6380
+            scheme: rediss
+            password:
+              secret: gitlab-redis-secret
+              key: password
+
+          appConfig:
+            object_store:
+              enabled: true
+              connection:
+                provider: AzureRM
+                azure_storage_account_name: $STORAGE_ACCOUNT
+                azure_storage_access_key: $STORAGE_KEY
+
+        postgresql:
+          install: false
+
+        redis:
+          install: false
+
+        nginx-ingress:
+          enabled: false
+        EOF
+
+    - name: Install GitLab
+      run: |
+        helm upgrade --install gitlab gitlab/gitlab \
+          --namespace gitlab \
+          -f values.yaml \
+          --timeout 40m
+
+    - name: Apply Ingress
+      run: kubectl apply -f k8s/ingress.yaml
