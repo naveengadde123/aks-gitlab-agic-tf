@@ -54,8 +54,12 @@ jobs:
           --resource-group rg-gitlab \
           --query "[0].hostName" -o tsv)
 
+        REDIS_NAME=$(az redis list \
+          --resource-group rg-gitlab \
+          --query "[0].name" -o tsv)
+
         REDIS_KEY=$(az redis list-keys \
-          --name $(az redis list --resource-group rg-gitlab --query "[0].name" -o tsv) \
+          --name $REDIS_NAME \
           --resource-group rg-gitlab \
           --query "primaryKey" -o tsv)
 
@@ -96,70 +100,60 @@ jobs:
         helm repo add gitlab https://charts.gitlab.io
         helm repo update
 
-    # ✅ FIXED values.yaml (MAIN CHANGE)
-    - name: Generate values.yaml
+    # SAFE FILE GENERATION (NO YAML BREAK)
+    - name: Create values.yaml safely
       run: |
-        cat <<EOF > values.yaml
-global:
-  edition: ce
-
-  hosts:
-    domain: gitlab.local.com
-    https: false
-
-  ingress:
-    class: azure/application-gateway
-    configureCertmanager: false
-
-  psql:
-    host: $POSTGRES_HOST
-    port: 5432
-    username: gitlabadmin
-    database: gitlabhq_production
-    password:
-      secret: gitlab-postgres-secret
-      key: password
-
-  redis:
-    host: $REDIS_HOST
-    port: 6380
-    scheme: rediss
-    password:
-      secret: gitlab-redis-secret
-      key: password
-
-  appConfig:
-    object_store:
-      enabled: true
-      connection:
-        provider: AzureRM
-        azure_storage_account_name: $STORAGE_ACCOUNT
-        azure_storage_access_key:
-          secret: gitlab-storage-secret
-          key: key
-
-certmanager-issuer:
-  enabled: false
-  email: admin@gitlab.local.com
-
-postgresql:
-  install: false
-
-redis:
-  install: false
-
-nginx-ingress:
-  enabled: false
-
-prometheus:
-  enabled: false
-
-grafana:
-  enabled: false
-
-gitlab-runner:
-  install: false
-EOF
+        printf "%s\n" \
+"global:" \
+"  edition: ce" \
+"  hosts:" \
+"    domain: gitlab.local.com" \
+"    https: false" \
+"  ingress:" \
+"    class: azure/application-gateway" \
+"    configureCertmanager: false" \
+"  psql:" \
+"    host: $POSTGRES_HOST" \
+"    port: 5432" \
+"    username: gitlabadmin" \
+"    database: gitlabhq_production" \
+"    password:" \
+"      secret: gitlab-postgres-secret" \
+"      key: password" \
+"  redis:" \
+"    host: $REDIS_HOST" \
+"    port: 6380" \
+"    scheme: rediss" \
+"    password:" \
+"      secret: gitlab-redis-secret" \
+"      key: password" \
+"  appConfig:" \
+"    object_store:" \
+"      enabled: true" \
+"      connection:" \
+"        provider: AzureRM" \
+"        azure_storage_account_name: $STORAGE_ACCOUNT" \
+"        azure_storage_access_key:" \
+"          secret: gitlab-storage-secret" \
+"          key: key" \
+"certmanager:" \
+"  install: false" \
+"certmanager-issuer:" \
+"  enabled: false" \
+"  email: admin@gitlab.local.com" \
+"postgresql:" \
+"  install: false" \
+"redis:" \
+"  install: false" \
+"nginx-ingress:" \
+"  enabled: false" \
+"prometheus:" \
+"  enabled: false" \
+"grafana:" \
+"  enabled: false" \
+"gitlab-runner:" \
+"  enabled: false" \
+> values.yaml
 
     - name: Install GitLab
       run: |
