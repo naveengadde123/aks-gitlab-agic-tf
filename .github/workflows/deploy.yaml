@@ -31,33 +31,10 @@ jobs:
         cd terraform
         terraform apply -auto-approve
 
-    # Debug (keep for now, remove later)
-    - name: Debug Terraform Outputs
+    - name: Get AKS Credentials
       run: |
-        cd terraform
-        terraform output || true
-
-    # FIXED OUTPUT EXTRACTION
-    - name: Get Terraform Outputs
-      run: |
-        cd terraform
-
-        POSTGRES_HOST=$(terraform output -raw postgres_host 2>/dev/null || echo "")
-        REDIS_HOST=$(terraform output -raw redis_host 2>/dev/null || echo "")
-        STORAGE_ACCOUNT=$(terraform output -raw storage_account 2>/dev/null || echo "")
-        REDIS_KEY=$(terraform output -raw redis_key 2>/dev/null || echo "")
-        STORAGE_KEY=$(terraform output -raw storage_key 2>/dev/null || echo "")
-
-        echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
-        echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
-        echo "REDIS_KEY=$REDIS_KEY" >> $GITHUB_ENV
-        echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
-        echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
-
-        # Mask sensitive values in logs
-        echo "::add-mask::$REDIS_KEY"
-        echo "::add-mask::$STORAGE_KEY"
-        echo "✓ Terraform outputs loaded successfully"
+        az aks get-credentials \
+          --resource-group rg-gitlab \
           --name aks-gitlab-eip \
           --overwrite-existing
 
@@ -72,12 +49,21 @@ jobs:
 
     - name: Create Kubernetes Secrets
       run: |
+        # PostgreSQL Secret
         kubectl create secret generic gitlab-postgres-secret \
-          --from-literal=password=StrongPass@123 \
+          --from-literal=password='P@ssw0rd123!Gitlab' \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
+        # Redis Secret (generate random password)
+        REDIS_PASS=$(openssl rand -base64 32)
         kubectl create secret generic gitlab-redis-secret \
-          --from-literal=password=$REDIS_KEY \
+          --from-literal=password="$REDIS_PASS" \
+          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+
+        # Storage Secret (generate random key)
+        STORAGE_KEY=$(openssl rand -base64 32)
+        kubectl create secret generic gitlab-storage-secret \
+          --from-literal=key="$STORAGE_KEY" \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Install Helm (safe install)
@@ -91,50 +77,81 @@ jobs:
 
     - name: Generate values.yaml
       run: |
-        cat <<EOF > values.yaml
-        global:
-          edition: ce
+        # Extract resource names from terraform state (quietly)
+        cd terraform
+        
+        POSTGRES_NAME=$(terraform state show -json azurerm_postgresql_flexible_server.pg 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        REDIS_NAME=$(terraform state show -json azurerm_redis_cache.redis 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        STORAGE_NAME=$(terraform state show -json azurerm_storage_account.storage 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        
+        # Build FQDNs
+        POSTGRES_HOST="${POSTGRES_NAME}.postgres.database.azure.com"
+        REDIS_HOST="${REDIS_NAME}.redis.cache.windows.net"
+        
+        # Generate values file
+        cat > values.yaml << 'HELM_VALUES'
+global:
+  edition: ce
 
-          hosts:
-            domain: gitlab.example.com
+  hosts:
+    domain: gitlab.local.com
 
-          ingress:
-            class: azure/application-gateway
+  ingress:
+    class: azure/application-gateway
 
-          psql:
-            host: $POSTGRES_HOST
-            port: 5432
-            username: gitlabadmin
-            database: gitlabhq_production
-            password:
-              secret: gitlab-postgres-secret
-              key: password
+  psql:
+    host: POSTGRES_HOST_PLACEHOLDER
+    port: 5432
+    username: gitlabadmin
+    database: gitlabhq_production
+    password:
+      secret: gitlab-postgres-secret
+      key: password
 
-          redis:
-            host: $REDIS_HOST
-            port: 6380
-            scheme: rediss
-            password:
-              secret: gitlab-redis-secret
-              key: password
+  redis:
+    host: REDIS_HOST_PLACEHOLDER
+    port: 6380
+    scheme: rediss
+    password:
+      secret: gitlab-redis-secret
+      key: password
 
-          appConfig:
-            object_store:
-              enabled: true
-              connection:
-                provider: AzureRM
-                azure_storage_account_name: "$STORAGE_ACCOUNT"
-                azure_storage_access_key: "$STORAGE_KEY"
+  appConfig:
+    object_store:
+      enabled: true
+      connection:
+        provider: AzureRM
+        azure_storage_account_name: STORAGE_NAME_PLACEHOLDER
+        azure_storage_access_key:
+          secret: gitlab-storage-secret
+          key: key
 
-        postgresql:
-          install: false
+postgresql:
+  install: false
 
-        redis:
-          install: false
+redis:
+  install: false
 
-        nginx-ingress:
-          enabled: false
-        EOF
+nginx-ingress:
+  enabled: false
+
+certmanager:
+  install: false
+
+prometheus:
+  install: false
+
+grafana:
+  install: false
+
+gitlab-runner:
+  install: false
+HELM_VALUES
+
+        # Replace placeholders with actual values
+        sed -i "s|POSTGRES_HOST_PLACEHOLDER|$POSTGRES_HOST|g" values.yaml
+        sed -i "s|REDIS_HOST_PLACEHOLDER|$REDIS_HOST|g" values.yaml
+        sed -i "s|STORAGE_NAME_PLACEHOLDER|$STORAGE_NAME|g" values.yaml
 
     - name: Install GitLab
       run: |
