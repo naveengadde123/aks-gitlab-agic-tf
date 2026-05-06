@@ -31,16 +31,22 @@ jobs:
         cd terraform
         terraform apply -auto-approve
 
-    # FIXED STEP (IMPORTANT)
+    # NEW STEP (REQUIRED)
+    - name: Install jq
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    # FIXED STEP (MAIN FIX)
     - name: Get Terraform Outputs
       run: |
         cd terraform
 
-        POSTGRES_HOST=$(terraform output -raw postgres_host | tr -d '\r')
-        REDIS_HOST=$(terraform output -raw redis_host | tr -d '\r')
-        REDIS_KEY=$(terraform output -raw redis_key | tr -d '\r')
-        STORAGE_ACCOUNT=$(terraform output -raw storage_account | tr -d '\r')
-        STORAGE_KEY=$(terraform output -raw storage_key | tr -d '\r')
+        OUTPUT=$(terraform output -json)
+
+        POSTGRES_HOST=$(echo $OUTPUT | jq -r '.postgres_host.value')
+        REDIS_HOST=$(echo $OUTPUT | jq -r '.redis_host.value')
+        REDIS_KEY=$(echo $OUTPUT | jq -r '.redis_key.value')
+        STORAGE_ACCOUNT=$(echo $OUTPUT | jq -r '.storage_account.value')
+        STORAGE_KEY=$(echo $OUTPUT | jq -r '.storage_key.value')
 
         echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
         echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
