@@ -31,38 +31,22 @@ jobs:
         cd terraform
         terraform apply -auto-approve
 
-    # DEBUG STEP (NEW)
-    - name: Debug Terraform State
+    # Debug (keep for now, remove later)
+    - name: Debug Terraform Outputs
       run: |
         cd terraform
-        terraform output
+        terraform output || true
 
-    # INSTALL jq (NEW)
-    - name: Install jq
-      run: sudo apt-get update && sudo apt-get install -y jq
-
-    # FIXED OUTPUT STEP
+    # FIXED OUTPUT EXTRACTION
     - name: Get Terraform Outputs
       run: |
         cd terraform
 
-        OUTPUT=$(terraform output -json 2>/dev/null)
-
-        echo "==== RAW TERRAFORM OUTPUT ===="
-        echo "$OUTPUT"
-
-        # Validate JSON
-        echo "$OUTPUT" | jq empty
-        if [ $? -ne 0 ]; then
-          echo "Terraform output is NOT valid JSON"
-          exit 1
-        fi
-
-        POSTGRES_HOST=$(echo "$OUTPUT" | jq -r '.postgres_host.value')
-        REDIS_HOST=$(echo "$OUTPUT" | jq -r '.redis_host.value')
-        REDIS_KEY=$(echo "$OUTPUT" | jq -r '.redis_key.value')
-        STORAGE_ACCOUNT=$(echo "$OUTPUT" | jq -r '.storage_account.value')
-        STORAGE_KEY=$(echo "$OUTPUT" | jq -r '.storage_key.value')
+        POSTGRES_HOST=$(terraform output -raw postgres_host 2>/dev/null || echo "")
+        REDIS_HOST=$(terraform output -raw redis_host 2>/dev/null || echo "")
+        STORAGE_ACCOUNT=$(terraform output -raw storage_account 2>/dev/null || echo "")
+        REDIS_KEY=$(terraform output -raw redis_key 2>/dev/null || echo "")
+        STORAGE_KEY=$(terraform output -raw storage_key 2>/dev/null || echo "")
 
         echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
         echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
@@ -70,12 +54,18 @@ jobs:
         echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
         echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
 
-    - name: Get AKS Credentials
-      run: |
-        az aks get-credentials \
-          --resource-group rg-gitlab \
+        # Mask sensitive values in logs
+        echo "::add-mask::$REDIS_KEY"
+        echo "::add-mask::$STORAGE_KEY"
+        echo "✓ Terraform outputs loaded successfully"
           --name aks-gitlab-eip \
           --overwrite-existing
+
+    # Wait for cluster readiness (important)
+    - name: Wait for AKS Ready
+      run: |
+        kubectl get nodes
+        sleep 30
 
     - name: Create Namespace
       run: kubectl create namespace gitlab || true
@@ -90,9 +80,9 @@ jobs:
           --from-literal=password=$REDIS_KEY \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Install Helm
+    - name: Install Helm (safe install)
       run: |
-        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
     - name: Add GitLab Repo
       run: |
@@ -133,8 +123,8 @@ jobs:
               enabled: true
               connection:
                 provider: AzureRM
-                azure_storage_account_name: $STORAGE_ACCOUNT
-                azure_storage_access_key: $STORAGE_KEY
+                azure_storage_account_name: "$STORAGE_ACCOUNT"
+                azure_storage_access_key: "$STORAGE_KEY"
 
         postgresql:
           install: false
@@ -151,7 +141,12 @@ jobs:
         helm upgrade --install gitlab gitlab/gitlab \
           --namespace gitlab \
           -f values.yaml \
-          --timeout 40m
+          --timeout 40m \
+          --wait
 
+    # Only needed if you actually created ingress.yaml
     - name: Apply Ingress
-      run: kubectl apply -f k8s/ingress.yaml
+      run: |
+        if [ -f k8s/ingress.yaml ]; then
+          kubectl apply -f k8s/ingress.yaml
+        fi

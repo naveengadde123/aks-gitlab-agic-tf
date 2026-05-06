@@ -1,5 +1,38 @@
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+}
+
 provider "azurerm" {
   features {}
+}
+
+provider "random" {}
+
+# Random suffix for globally unique storage account name
+resource "random_string" "storage_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+# -------------------------
+# Variables
+# -------------------------
+variable "postgresql_admin_password" {
+  description = "PostgreSQL administrator password"
+  type        = string
+  sensitive   = true
+  default     = "P@ssw0rd123!Gitlab"
 }
 
 # -------------------------
@@ -139,26 +172,49 @@ resource "azurerm_kubernetes_cluster" "aks" {
 # PostgreSQL (ADDED)
 # -------------------------
 resource "azurerm_postgresql_flexible_server" "pg" {
-  name                   = "gitlab-postgres"
+  name                   = "gitlab-postgres-${random_string.storage_suffix.result}"
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
   version                = "13"
 
   administrator_login    = "gitlabadmin"
-  administrator_password = "StrongPass@123"
+  administrator_password = var.postgresql_admin_password
 
   storage_mb = 32768
   sku_name   = "B_Standard_B1ms"
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres_vnet_link]
+}
+
+# PostgreSQL Database
+resource "azurerm_postgresql_flexible_server_database" "gitlab_db" {
+  name       = "gitlabhq_production"
+  server_id  = azurerm_postgresql_flexible_server.pg.id
+  charset    = "UTF8"
+  collation  = "en_US.utf8"
+}
+
+# Private DNS Zone for PostgreSQL
+resource "azurerm_private_dns_zone" "postgres" {
+  name                = "postgres.database.azure.com"
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "postgres_vnet_link" {
+  name                  = "postgres-vnet-link"
+  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
+  resource_group_name   = azurerm_resource_group.rg.name
+  virtual_network_id    = azurerm_virtual_network.vnet.id
 }
 
 # -------------------------
 # Redis (ADDED)
 # -------------------------
 resource "azurerm_redis_cache" "redis" {
-  name                = "gitlab-redis-aks-001"
+  name                = "gitlab-redis-aks-${random_string.storage_suffix.result}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  capacity            = 0
+  capacity            = 1
   family              = "C"
   sku_name            = "Basic"
 }
@@ -167,7 +223,7 @@ resource "azurerm_redis_cache" "redis" {
 # Storage Account (ADDED)
 # -------------------------
 resource "azurerm_storage_account" "storage" {
-  name                     = "gitlabstorage12345"
+  name                     = "gitlabsa${random_string.storage_suffix.result}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"

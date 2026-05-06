@@ -4,8 +4,13 @@ metadata:
   name: gitlab-ingress
   namespace: gitlab
   annotations:
-    kubernetes.io/ingress.class: azure/application-gateway
+    cert.certmanager.io/cluster-issuer: "letsencrypt-prod"
 spec:
+  ingressClassName: azure/application-gateway
+  tls:
+  - hosts:
+    - gitlab.local.com
+    secretName: gitlab-tls-cert
   rules:
   - host: gitlab.local.com
     http:

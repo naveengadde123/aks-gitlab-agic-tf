@@ -1,6 +1,44 @@
 global:
+  edition: ce
+  
   hosts:
-    domain: example.com
+    domain: gitlab.local.com
+  
+  ingress:
+    class: azure/application-gateway
+  
+  psql:
+    host: gitlab-postgres.postgres.database.azure.com
+    port: 5432
+    username: gitlabadmin
+    database: gitlabhq_production
+    password:
+      secret: gitlab-postgres-secret
+      key: password
+  
+  redis:
+    host: gitlab-redis-aks-001.redis.cache.windows.net
+    port: 6380
+    scheme: rediss
+    password:
+      secret: gitlab-redis-secret
+      key: password
+  
+  appConfig:
+    object_store:
+      enabled: true
+      connection:
+        provider: AzureRM
+        azure_storage_account_name: gitlabstorage
+        azure_storage_access_key:
+          secret: gitlab-storage-secret
+          key: key
+
+postgresql:
+  install: false
+
+redis:
+  install: false
 
 nginx-ingress:
   enabled: false
