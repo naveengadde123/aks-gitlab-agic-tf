@@ -31,22 +31,38 @@ jobs:
         cd terraform
         terraform apply -auto-approve
 
-    # NEW STEP (REQUIRED)
+    # DEBUG STEP (NEW)
+    - name: Debug Terraform State
+      run: |
+        cd terraform
+        terraform output
+
+    # INSTALL jq (NEW)
     - name: Install jq
       run: sudo apt-get update && sudo apt-get install -y jq
 
-    # FIXED STEP (MAIN FIX)
+    # FIXED OUTPUT STEP
     - name: Get Terraform Outputs
       run: |
         cd terraform
 
-        OUTPUT=$(terraform output -json)
+        OUTPUT=$(terraform output -json 2>/dev/null)
 
-        POSTGRES_HOST=$(echo $OUTPUT | jq -r '.postgres_host.value')
-        REDIS_HOST=$(echo $OUTPUT | jq -r '.redis_host.value')
-        REDIS_KEY=$(echo $OUTPUT | jq -r '.redis_key.value')
-        STORAGE_ACCOUNT=$(echo $OUTPUT | jq -r '.storage_account.value')
-        STORAGE_KEY=$(echo $OUTPUT | jq -r '.storage_key.value')
+        echo "==== RAW TERRAFORM OUTPUT ===="
+        echo "$OUTPUT"
+
+        # Validate JSON
+        echo "$OUTPUT" | jq empty
+        if [ $? -ne 0 ]; then
+          echo "Terraform output is NOT valid JSON"
+          exit 1
+        fi
+
+        POSTGRES_HOST=$(echo "$OUTPUT" | jq -r '.postgres_host.value')
+        REDIS_HOST=$(echo "$OUTPUT" | jq -r '.redis_host.value')
+        REDIS_KEY=$(echo "$OUTPUT" | jq -r '.redis_key.value')
+        STORAGE_ACCOUNT=$(echo "$OUTPUT" | jq -r '.storage_account.value')
+        STORAGE_KEY=$(echo "$OUTPUT" | jq -r '.storage_key.value')
 
         echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
         echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
