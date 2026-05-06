@@ -36,6 +36,10 @@ global:
           secret: gitlab-storage-secret
           key: key
 
+certmanager-issuer:
+  enabled: false
+  email: admin@gitlab.local.com
+
 # Disable internal services
 postgresql:
   install: false

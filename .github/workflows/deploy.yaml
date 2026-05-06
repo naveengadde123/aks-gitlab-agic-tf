@@ -111,9 +111,6 @@ global:
     class: azure/application-gateway
     configureCertmanager: false
 
-  certmanager:
-    install: false
-
   psql:
     host: $POSTGRES_HOST
     port: 5432
@@ -143,6 +140,7 @@ global:
 
 certmanager-issuer:
   enabled: false
+  email: admin@gitlab.local.com
 
 postgresql:
   install: false
@@ -158,6 +156,9 @@ prometheus:
 
 grafana:
   enabled: false
+
+gitlab-runner:
+  install: false
 EOF
 
     - name: Install GitLab
