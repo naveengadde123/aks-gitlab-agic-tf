@@ -13,7 +13,6 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    # Use explicit secrets (more stable than creds JSON)
     - name: Azure Login
       uses: azure/login@v1
       with:
@@ -32,16 +31,23 @@ jobs:
         cd terraform
         terraform apply -auto-approve
 
+    # FIXED STEP (IMPORTANT)
     - name: Get Terraform Outputs
       run: |
         cd terraform
-        echo "POSTGRES_HOST=$(terraform output -raw postgres_host)" >> $GITHUB_ENV
-        echo "REDIS_HOST=$(terraform output -raw redis_host)" >> $GITHUB_ENV
-        echo "REDIS_KEY=$(terraform output -raw redis_key)" >> $GITHUB_ENV
-        echo "STORAGE_ACCOUNT=$(terraform output -raw storage_account)" >> $GITHUB_ENV
-        echo "STORAGE_KEY=$(terraform output -raw storage_key)" >> $GITHUB_ENV
 
-    # IMPORTANT: Fix cluster name + RG (match Terraform)
+        POSTGRES_HOST=$(terraform output -raw postgres_host | tr -d '\r')
+        REDIS_HOST=$(terraform output -raw redis_host | tr -d '\r')
+        REDIS_KEY=$(terraform output -raw redis_key | tr -d '\r')
+        STORAGE_ACCOUNT=$(terraform output -raw storage_account | tr -d '\r')
+        STORAGE_KEY=$(terraform output -raw storage_key | tr -d '\r')
+
+        echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
+        echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
+        echo "REDIS_KEY=$REDIS_KEY" >> $GITHUB_ENV
+        echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+        echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
+
     - name: Get AKS Credentials
       run: |
         az aks get-credentials \
