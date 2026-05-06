@@ -137,6 +137,11 @@ resource "azurerm_application_gateway" "appgw" {
     backend_http_settings_name = "http-setting"
     priority                   = 1
   }
+
+  ssl_policy {
+    policy_type = "Predefined"
+    policy_name = "AppGwSslPolicy20220101"
+  }
 }
 
 # -------------------------
