@@ -79,9 +79,10 @@ jobs:
       run: |
         cd terraform
         
-        POSTGRES_NAME=$(terraform state show -json azurerm_postgresql_flexible_server.pg 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
-        REDIS_NAME=$(terraform state show -json azurerm_redis_cache.redis 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
-        STORAGE_NAME=$(terraform state show -json azurerm_storage_account.storage 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        # Extract resource names using jq on terraform state
+        POSTGRES_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_postgresql_flexible_server") | .instances[0].attributes.name' 2>/dev/null)
+        REDIS_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_redis_cache") | .instances[0].attributes.name' 2>/dev/null)
+        STORAGE_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_storage_account") | .instances[0].attributes.name' 2>/dev/null)
         
         POSTGRES_HOST="${POSTGRES_NAME}.postgres.database.azure.com"
         REDIS_HOST="${REDIS_NAME}.redis.cache.windows.net"
