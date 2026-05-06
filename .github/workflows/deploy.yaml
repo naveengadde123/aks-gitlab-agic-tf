@@ -96,63 +96,69 @@ jobs:
         helm repo add gitlab https://charts.gitlab.io
         helm repo update
 
-    #  FIXED BLOCK (IMPORTANT)
+    # ✅ FIXED values.yaml (MAIN CHANGE)
     - name: Generate values.yaml
       run: |
         cat <<EOF > values.yaml
-        global:
-          edition: ce
-          hosts:
-            domain: gitlab.local.com
+global:
+  edition: ce
 
-          ingress:
-            class: azure/application-gateway
+  hosts:
+    domain: gitlab.local.com
+    https: false
 
-          psql:
-            host: $POSTGRES_HOST
-            port: 5432
-            username: gitlabadmin
-            database: gitlabhq_production
-            password:
-              secret: gitlab-postgres-secret
-              key: password
+  ingress:
+    class: azure/application-gateway
+    configureCertmanager: false
 
-          redis:
-            host: $REDIS_HOST
-            port: 6380
-            scheme: rediss
-            password:
-              secret: gitlab-redis-secret
-              key: password
+  certmanager:
+    install: false
 
-          appConfig:
-            object_store:
-              enabled: true
-              connection:
-                provider: AzureRM
-                azure_storage_account_name: $STORAGE_ACCOUNT
-                azure_storage_access_key:
-                  secret: gitlab-storage-secret
-                  key: key
+  psql:
+    host: $POSTGRES_HOST
+    port: 5432
+    username: gitlabadmin
+    database: gitlabhq_production
+    password:
+      secret: gitlab-postgres-secret
+      key: password
 
-        postgresql:
-          install: false
+  redis:
+    host: $REDIS_HOST
+    port: 6380
+    scheme: rediss
+    password:
+      secret: gitlab-redis-secret
+      key: password
 
-        redis:
-          install: false
+  appConfig:
+    object_store:
+      enabled: true
+      connection:
+        provider: AzureRM
+        azure_storage_account_name: $STORAGE_ACCOUNT
+        azure_storage_access_key:
+          secret: gitlab-storage-secret
+          key: key
 
-        nginx-ingress:
-          enabled: false
+certmanager-issuer:
+  enabled: false
 
-        prometheus:
-          enabled: false
+postgresql:
+  install: false
 
-        grafana:
-          enabled: false
+redis:
+  install: false
 
-        gitlab-runner:
-          install: false
-        EOF
+nginx-ingress:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false
+EOF
 
     - name: Install GitLab
       run: |
