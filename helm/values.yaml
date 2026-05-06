@@ -36,11 +36,16 @@ global:
           secret: gitlab-storage-secret
           key: key
 
+# FIX 1: must disable properly
+certmanager:
+  install: false
+
+# FIX 2: issuer block must still exist but disabled
 certmanager-issuer:
   enabled: false
-  email: admin@gitlab.local.com
+  email: "admin@gitlab.local.com"
 
-# Disable internal services
+# Disable internal services (correct)
 postgresql:
   install: false
 
@@ -50,6 +55,7 @@ redis:
 nginx-ingress:
   enabled: false
 
+# FIX 3: GitLab charts expect "enabled", not install
 prometheus:
   enabled: false
 
@@ -57,4 +63,4 @@ grafana:
   enabled: false
 
 gitlab-runner:
-  install: false
+  enabled: false
