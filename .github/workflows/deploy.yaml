@@ -77,28 +77,22 @@ jobs:
 
     - name: Generate values.yaml
       run: |
-        # Extract resource names from terraform state (quietly)
         cd terraform
         
         POSTGRES_NAME=$(terraform state show -json azurerm_postgresql_flexible_server.pg 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
         REDIS_NAME=$(terraform state show -json azurerm_redis_cache.redis 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
         STORAGE_NAME=$(terraform state show -json azurerm_storage_account.storage 2>/dev/null | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
         
-        # Build FQDNs
         POSTGRES_HOST="${POSTGRES_NAME}.postgres.database.azure.com"
         REDIS_HOST="${REDIS_NAME}.redis.cache.windows.net"
         
-        # Generate values file
-        cat > values.yaml << 'HELM_VALUES'
+        cat > values.yaml <<'EOF'
 global:
   edition: ce
-
   hosts:
     domain: gitlab.local.com
-
   ingress:
     class: azure/application-gateway
-
   psql:
     host: POSTGRES_HOST_PLACEHOLDER
     port: 5432
@@ -107,7 +101,6 @@ global:
     password:
       secret: gitlab-postgres-secret
       key: password
-
   redis:
     host: REDIS_HOST_PLACEHOLDER
     port: 6380
@@ -115,7 +108,6 @@ global:
     password:
       secret: gitlab-redis-secret
       key: password
-
   appConfig:
     object_store:
       enabled: true
@@ -125,30 +117,22 @@ global:
         azure_storage_access_key:
           secret: gitlab-storage-secret
           key: key
-
 postgresql:
   install: false
-
 redis:
   install: false
-
 nginx-ingress:
   enabled: false
-
 certmanager:
   install: false
-
 prometheus:
   install: false
-
 grafana:
   install: false
-
 gitlab-runner:
   install: false
-HELM_VALUES
+EOF
 
-        # Replace placeholders with actual values
         sed -i "s|POSTGRES_HOST_PLACEHOLDER|$POSTGRES_HOST|g" values.yaml
         sed -i "s|REDIS_HOST_PLACEHOLDER|$REDIS_HOST|g" values.yaml
         sed -i "s|STORAGE_NAME_PLACEHOLDER|$STORAGE_NAME|g" values.yaml
