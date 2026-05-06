@@ -144,14 +144,11 @@ jobs:
         nginx-ingress:
           enabled: false
 
-        certmanager:
-          install: false
-
         prometheus:
-          install: false
+          enabled: false
 
         grafana:
-          install: false
+          enabled: false
 
         gitlab-runner:
           install: false

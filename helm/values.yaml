@@ -1,12 +1,14 @@
 global:
   edition: ce
-  
+
   hosts:
     domain: gitlab.local.com
-  
+    https: false
+
   ingress:
     class: azure/application-gateway
-  
+    configureCertmanager: false
+
   psql:
     host: gitlab-postgres.postgres.database.azure.com
     port: 5432
@@ -15,7 +17,7 @@ global:
     password:
       secret: gitlab-postgres-secret
       key: password
-  
+
   redis:
     host: gitlab-redis-aks-001.redis.cache.windows.net
     port: 6380
@@ -23,7 +25,7 @@ global:
     password:
       secret: gitlab-redis-secret
       key: password
-  
+
   appConfig:
     object_store:
       enabled: true
@@ -34,6 +36,7 @@ global:
           secret: gitlab-storage-secret
           key: key
 
+# Disable internal services
 postgresql:
   install: false
 
@@ -43,14 +46,11 @@ redis:
 nginx-ingress:
   enabled: false
 
-certmanager:
-  install: false
-
 prometheus:
-  install: false
+  enabled: false
 
 grafana:
-  install: false
+  enabled: false
 
 gitlab-runner:
   install: false
