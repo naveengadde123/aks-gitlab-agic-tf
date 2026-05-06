@@ -29,7 +29,6 @@ jobs:
       working-directory: terraform
       run: terraform apply -auto-approve
 
-    # Get AKS credentials
     - name: Get AKS Credentials
       run: |
         az aks get-credentials \
@@ -45,7 +44,6 @@ jobs:
     - name: Create Namespace
       run: kubectl create namespace gitlab || true
 
-    # Get REAL values from Azure (important fix)
     - name: Fetch Azure Resource Details
       run: |
         POSTGRES_HOST=$(az postgres flexible-server list \
@@ -76,7 +74,6 @@ jobs:
         echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
         echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
 
-    # Create correct secrets
     - name: Create Kubernetes Secrets
       run: |
         kubectl create secret generic gitlab-postgres-secret \
@@ -99,66 +96,66 @@ jobs:
         helm repo add gitlab https://charts.gitlab.io
         helm repo update
 
-    # FIXED values.yaml generation (no terraform dependency)
+    #  FIXED BLOCK (IMPORTANT)
     - name: Generate values.yaml
       run: |
         cat <<EOF > values.yaml
-global:
-  edition: ce
-  hosts:
-    domain: gitlab.local.com
+        global:
+          edition: ce
+          hosts:
+            domain: gitlab.local.com
 
-  ingress:
-    class: azure/application-gateway
+          ingress:
+            class: azure/application-gateway
 
-  psql:
-    host: $POSTGRES_HOST
-    port: 5432
-    username: gitlabadmin
-    database: gitlabhq_production
-    password:
-      secret: gitlab-postgres-secret
-      key: password
+          psql:
+            host: $POSTGRES_HOST
+            port: 5432
+            username: gitlabadmin
+            database: gitlabhq_production
+            password:
+              secret: gitlab-postgres-secret
+              key: password
 
-  redis:
-    host: $REDIS_HOST
-    port: 6380
-    scheme: rediss
-    password:
-      secret: gitlab-redis-secret
-      key: password
+          redis:
+            host: $REDIS_HOST
+            port: 6380
+            scheme: rediss
+            password:
+              secret: gitlab-redis-secret
+              key: password
 
-  appConfig:
-    object_store:
-      enabled: true
-      connection:
-        provider: AzureRM
-        azure_storage_account_name: $STORAGE_ACCOUNT
-        azure_storage_access_key:
-          secret: gitlab-storage-secret
-          key: key
+          appConfig:
+            object_store:
+              enabled: true
+              connection:
+                provider: AzureRM
+                azure_storage_account_name: $STORAGE_ACCOUNT
+                azure_storage_access_key:
+                  secret: gitlab-storage-secret
+                  key: key
 
-postgresql:
-  install: false
+        postgresql:
+          install: false
 
-redis:
-  install: false
+        redis:
+          install: false
 
-nginx-ingress:
-  enabled: false
+        nginx-ingress:
+          enabled: false
 
-certmanager:
-  install: false
+        certmanager:
+          install: false
 
-prometheus:
-  install: false
+        prometheus:
+          install: false
 
-grafana:
-  install: false
+        grafana:
+          install: false
 
-gitlab-runner:
-  install: false
-EOF
+        gitlab-runner:
+          install: false
+        EOF
 
     - name: Install GitLab
       run: |
