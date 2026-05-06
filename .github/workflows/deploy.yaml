@@ -100,7 +100,6 @@ jobs:
         helm repo add gitlab https://charts.gitlab.io
         helm repo update
 
-    # SAFE FILE GENERATION (NO YAML BREAK)
     - name: Create values.yaml safely
       run: |
         printf "%s\n" \
@@ -137,7 +136,7 @@ jobs:
 "          secret: gitlab-storage-secret" \
 "          key: key" \
 "certmanager:" \
-"  install: false" \
+"  enabled: false" \
 "certmanager-issuer:" \
 "  enabled: false" \
 "  email: admin@gitlab.local.com" \
