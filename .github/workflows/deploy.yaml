@@ -22,15 +22,14 @@ jobs:
       uses: hashicorp/setup-terraform@v2
 
     - name: Terraform Init
-      run: |
-        cd terraform
-        terraform init
+      working-directory: terraform
+      run: terraform init
 
     - name: Terraform Apply
-      run: |
-        cd terraform
-        terraform apply -auto-approve
+      working-directory: terraform
+      run: terraform apply -auto-approve
 
+    # Get AKS credentials
     - name: Get AKS Credentials
       run: |
         az aks get-credentials \
@@ -38,7 +37,6 @@ jobs:
           --name aks-gitlab-eip \
           --overwrite-existing
 
-    # Wait for cluster readiness (important)
     - name: Wait for AKS Ready
       run: |
         kubectl get nodes
@@ -47,96 +45,120 @@ jobs:
     - name: Create Namespace
       run: kubectl create namespace gitlab || true
 
+    # Get REAL values from Azure (important fix)
+    - name: Fetch Azure Resource Details
+      run: |
+        POSTGRES_HOST=$(az postgres flexible-server list \
+          --resource-group rg-gitlab \
+          --query "[0].fullyQualifiedDomainName" -o tsv)
+
+        REDIS_HOST=$(az redis list \
+          --resource-group rg-gitlab \
+          --query "[0].hostName" -o tsv)
+
+        REDIS_KEY=$(az redis list-keys \
+          --name $(az redis list --resource-group rg-gitlab --query "[0].name" -o tsv) \
+          --resource-group rg-gitlab \
+          --query "primaryKey" -o tsv)
+
+        STORAGE_ACCOUNT=$(az storage account list \
+          --resource-group rg-gitlab \
+          --query "[0].name" -o tsv)
+
+        STORAGE_KEY=$(az storage account keys list \
+          --account-name $STORAGE_ACCOUNT \
+          --resource-group rg-gitlab \
+          --query "[0].value" -o tsv)
+
+        echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
+        echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
+        echo "REDIS_KEY=$REDIS_KEY" >> $GITHUB_ENV
+        echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+        echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
+
+    # Create correct secrets
     - name: Create Kubernetes Secrets
       run: |
-        # PostgreSQL Secret
         kubectl create secret generic gitlab-postgres-secret \
           --from-literal=password='P@ssw0rd123!Gitlab' \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
-        # Redis Secret (generate random password)
-        REDIS_PASS=$(openssl rand -base64 32)
         kubectl create secret generic gitlab-redis-secret \
-          --from-literal=password="$REDIS_PASS" \
+          --from-literal=password="$REDIS_KEY" \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
-        # Storage Secret (generate random key)
-        STORAGE_KEY=$(openssl rand -base64 32)
         kubectl create secret generic gitlab-storage-secret \
           --from-literal=key="$STORAGE_KEY" \
           -n gitlab --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Install Helm (safe install)
-      run: |
-        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    - name: Install Helm
+      run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
     - name: Add GitLab Repo
       run: |
         helm repo add gitlab https://charts.gitlab.io
         helm repo update
 
+    # FIXED values.yaml generation (no terraform dependency)
     - name: Generate values.yaml
       run: |
-        cd terraform
-        
-        # Extract resource names using jq on terraform state
-        POSTGRES_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_postgresql_flexible_server") | .instances[0].attributes.name' 2>/dev/null)
-        REDIS_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_redis_cache") | .instances[0].attributes.name' 2>/dev/null)
-        STORAGE_NAME=$(terraform state show -json | jq -r '.resources[] | select(.type=="azurerm_storage_account") | .instances[0].attributes.name' 2>/dev/null)
-        
-        POSTGRES_HOST="${POSTGRES_NAME}.postgres.database.azure.com"
-        REDIS_HOST="${REDIS_NAME}.redis.cache.windows.net"
-        
-        cat > values.yaml <<'EOF'
+        cat <<EOF > values.yaml
 global:
   edition: ce
   hosts:
     domain: gitlab.local.com
+
   ingress:
     class: azure/application-gateway
+
   psql:
-    host: POSTGRES_HOST_PLACEHOLDER
+    host: $POSTGRES_HOST
     port: 5432
     username: gitlabadmin
     database: gitlabhq_production
     password:
       secret: gitlab-postgres-secret
       key: password
+
   redis:
-    host: REDIS_HOST_PLACEHOLDER
+    host: $REDIS_HOST
     port: 6380
     scheme: rediss
     password:
       secret: gitlab-redis-secret
       key: password
+
   appConfig:
     object_store:
       enabled: true
       connection:
         provider: AzureRM
-        azure_storage_account_name: STORAGE_NAME_PLACEHOLDER
+        azure_storage_account_name: $STORAGE_ACCOUNT
         azure_storage_access_key:
           secret: gitlab-storage-secret
           key: key
+
 postgresql:
   install: false
+
 redis:
   install: false
+
 nginx-ingress:
   enabled: false
+
 certmanager:
   install: false
+
 prometheus:
   install: false
+
 grafana:
   install: false
+
 gitlab-runner:
   install: false
 EOF
-
-        sed -i "s|POSTGRES_HOST_PLACEHOLDER|$POSTGRES_HOST|g" values.yaml
-        sed -i "s|REDIS_HOST_PLACEHOLDER|$REDIS_HOST|g" values.yaml
-        sed -i "s|STORAGE_NAME_PLACEHOLDER|$STORAGE_NAME|g" values.yaml
 
     - name: Install GitLab
       run: |
@@ -146,8 +168,7 @@ EOF
           --timeout 40m \
           --wait
 
-    # Only needed if you actually created ingress.yaml
-    - name: Apply Ingress
+    - name: Apply Ingress (optional)
       run: |
         if [ -f k8s/ingress.yaml ]; then
           kubectl apply -f k8s/ingress.yaml
