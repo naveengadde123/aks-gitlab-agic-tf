@@ -10,160 +10,110 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
 
-    - name: Terraform Init
-      working-directory: terraform
-      run: terraform init
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
 
-    - name: Terraform Apply
-      working-directory: terraform
-      run: terraform apply -auto-approve
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
 
-    - name: Get AKS Credentials
-      run: |
-        az aks get-credentials \
-          --resource-group rg-gitlab \
-          --name aks-gitlab-eip \
-          --overwrite-existing
+      - name: Get AKS Credentials
+        run: |
+          az aks get-credentials \
+            --resource-group rg-gitlab \
+            --name aks-gitlab-eip \
+            --overwrite-existing
 
-    - name: Wait for AKS Ready
-      run: |
-        kubectl get nodes
-        sleep 30
+      - name: Verify AKS Cluster
+        run: kubectl get nodes
 
-    - name: Create Namespace
-      run: kubectl create namespace gitlab || true
+      - name: Create Namespace
+        run: kubectl create namespace gitlab || true
 
-    - name: Fetch Azure Resource Details
-      run: |
-        POSTGRES_HOST=$(az postgres flexible-server list \
-          --resource-group rg-gitlab \
-          --query "[0].fullyQualifiedDomainName" -o tsv)
+      - name: Fetch Azure Resource Details
+        run: |
+          POSTGRES_HOST=$(az postgres flexible-server list \
+            --resource-group rg-gitlab \
+            --query "[0].fullyQualifiedDomainName" -o tsv)
 
-        REDIS_HOST=$(az redis list \
-          --resource-group rg-gitlab \
-          --query "[0].hostName" -o tsv)
+          REDIS_HOST=$(az redis list \
+            --resource-group rg-gitlab \
+            --query "[0].hostName" -o tsv)
 
-        REDIS_NAME=$(az redis list \
-          --resource-group rg-gitlab \
-          --query "[0].name" -o tsv)
+          REDIS_NAME=$(az redis list \
+            --resource-group rg-gitlab \
+            --query "[0].name" -o tsv)
 
-        REDIS_KEY=$(az redis list-keys \
-          --name $REDIS_NAME \
-          --resource-group rg-gitlab \
-          --query "primaryKey" -o tsv)
+          REDIS_KEY=$(az redis list-keys \
+            --name $REDIS_NAME \
+            --resource-group rg-gitlab \
+            --query "primaryKey" -o tsv)
 
-        STORAGE_ACCOUNT=$(az storage account list \
-          --resource-group rg-gitlab \
-          --query "[0].name" -o tsv)
+          STORAGE_ACCOUNT=$(az storage account list \
+            --resource-group rg-gitlab \
+            --query "[0].name" -o tsv)
 
-        STORAGE_KEY=$(az storage account keys list \
-          --account-name $STORAGE_ACCOUNT \
-          --resource-group rg-gitlab \
-          --query "[0].value" -o tsv)
+          STORAGE_KEY=$(az storage account keys list \
+            --account-name $STORAGE_ACCOUNT \
+            --resource-group rg-gitlab \
+            --query "[0].value" -o tsv)
 
-        echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
-        echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
-        echo "REDIS_KEY=$REDIS_KEY" >> $GITHUB_ENV
-        echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
-        echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
+          echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
+          echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
+          echo "REDIS_KEY=$REDIS_KEY" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+          echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
 
-    - name: Create Kubernetes Secrets
-      run: |
-        kubectl create secret generic gitlab-postgres-secret \
-          --from-literal=password='P@ssw0rd123!Gitlab' \
-          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+      - name: Create Kubernetes Secrets
+        run: |
+          kubectl create secret generic gitlab-postgres-secret \
+            --from-literal=password='P@ssw0rd123!Gitlab' \
+            -n gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-        kubectl create secret generic gitlab-redis-secret \
-          --from-literal=password="$REDIS_KEY" \
-          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic gitlab-redis-secret \
+            --from-literal=password="$REDIS_KEY" \
+            -n gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-        kubectl create secret generic gitlab-storage-secret \
-          --from-literal=key="$STORAGE_KEY" \
-          -n gitlab --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic gitlab-storage-secret \
+            --from-literal=key="$STORAGE_KEY" \
+            -n gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-    - name: Install Helm
-      run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      - name: Install Helm
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-    - name: Add GitLab Repo
-      run: |
-        helm repo add gitlab https://charts.gitlab.io
-        helm repo update
+      - name: Add GitLab Repo
+        run: |
+          helm repo add gitlab https://charts.gitlab.io
+          helm repo update
 
-    - name: Create values.yaml safely
-      run: |
-        printf "%s\n" \
-"global:" \
-"  edition: ce" \
-"  hosts:" \
-"    domain: gitlab.local.com" \
-"    https: false" \
-"  ingress:" \
-"    class: azure/application-gateway" \
-"    configureCertmanager: false" \
-"  psql:" \
-"    host: $POSTGRES_HOST" \
-"    port: 5432" \
-"    username: gitlabadmin" \
-"    database: gitlabhq_production" \
-"    password:" \
-"      secret: gitlab-postgres-secret" \
-"      key: password" \
-"  redis:" \
-"    host: $REDIS_HOST" \
-"    port: 6380" \
-"    scheme: rediss" \
-"    password:" \
-"      secret: gitlab-redis-secret" \
-"      key: password" \
-"  appConfig:" \
-"    object_store:" \
-"      enabled: true" \
-"      connection:" \
-"        provider: AzureRM" \
-"        azure_storage_account_name: $STORAGE_ACCOUNT" \
-"        azure_storage_access_key:" \
-"          secret: gitlab-storage-secret" \
-"          key: key" \
-"certmanager:" \
-"  enabled: false" \
-"certmanager-issuer:" \
-"  enabled: false" \
-"  email: admin@gitlab.local.com" \
-"postgresql:" \
-"  install: false" \
-"redis:" \
-"  install: false" \
-"nginx-ingress:" \
-"  enabled: false" \
-"prometheus:" \
-"  enabled: false" \
-"grafana:" \
-"  enabled: false" \
-"gitlab-runner:" \
-"  enabled: false" \
-> values.yaml
+      - name: Install GitLab
+        run: |
+          helm upgrade --install gitlab gitlab/gitlab \
+            --namespace gitlab \
+            -f helm/values.yaml \
+            --timeout 40m \
+            --wait
 
-    - name: Install GitLab
-      run: |
-        helm upgrade --install gitlab gitlab/gitlab \
-          --namespace gitlab \
-          -f values.yaml \
-          --timeout 40m \
-          --wait
+      - name: Check GitLab Pods
+        run: kubectl get pods -n gitlab
 
-    - name: Apply Ingress (optional)
-      run: |
-        if [ -f k8s/ingress.yaml ]; then
-          kubectl apply -f k8s/ingress.yaml
-        fi
+      - name: Apply Ingress
+        run: |
+          if [ -f k8s/ingress.yaml ]; then
+            kubectl apply -f k8s/ingress.yaml
+          fi
