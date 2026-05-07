@@ -6,7 +6,7 @@ global:
     https: false
 
   ingress:
-    class: azure/application-gateway
+    class: azure-application-gateway
     configureCertmanager: false
 
   psql:
@@ -40,7 +40,7 @@ global:
 
 certmanager-issuer:
   enabled: false
-  email: "admin@gitlab.local.com"
+  email: admin@gitlab.local.com
 
 postgresql:
   install: false
@@ -59,3 +59,17 @@ grafana:
 
 gitlab-runner:
   enabled: false
+
+registry:
+  enabled: false
+
+minio:
+  enabled: false
+
+gitlab:
+  webservice:
+    ingress:
+      enabled: true
+
+  kas:
+    enabled: false
