@@ -22,7 +22,9 @@ global:
     host: gitlab-redis-aks-001.redis.cache.windows.net
     port: 6380
     scheme: rediss
-    password:
+
+    auth:
+      enabled: true
       secret: gitlab-redis-secret
       key: password
 
@@ -36,16 +38,10 @@ global:
           secret: gitlab-storage-secret
           key: key
 
-# FIX 1: must disable properly
-certmanager:
-  install: false
-
-# FIX 2: issuer block must still exist but disabled
 certmanager-issuer:
   enabled: false
   email: "admin@gitlab.local.com"
 
-# Disable internal services (correct)
 postgresql:
   install: false
 
@@ -55,7 +51,6 @@ redis:
 nginx-ingress:
   enabled: false
 
-# FIX 3: GitLab charts expect "enabled", not install
 prometheus:
   enabled: false
 
