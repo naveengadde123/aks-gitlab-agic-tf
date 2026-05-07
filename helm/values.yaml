@@ -21,6 +21,7 @@ global:
       secret: gitlab-postgres-secret
       key: password
 
+global:
   redis:
     host: gitlab-redis-aks-001.redis.cache.windows.net
     port: 6380
@@ -35,9 +36,6 @@ global:
       connection:
         secret: gitlab-storage-secret
         key: connection
-
-certmanager:
-  install: false
 
 certmanager-issuer:
   enabled: false
