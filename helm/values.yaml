@@ -1,6 +1,9 @@
 global:
   edition: ce
 
+  minio:
+    enabled: false
+
   hosts:
     domain: gitlab.local.com
     https: false
@@ -61,9 +64,6 @@ gitlab-runner:
   enabled: false
 
 registry:
-  enabled: false
-
-minio:
   enabled: false
 
 gitlab:
