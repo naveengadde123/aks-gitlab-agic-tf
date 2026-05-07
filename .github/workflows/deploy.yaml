@@ -37,11 +37,13 @@ jobs:
             --overwrite-existing
 
       - name: Verify AKS Cluster
-        run: kubectl get nodes
+        run: |
+          kubectl get nodes
 
       - name: Create Namespace
         run: |
-          kubectl create namespace gitlab --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Fetch Azure Resource Details
         run: |
@@ -114,19 +116,39 @@ jobs:
             --namespace gitlab \
             --create-namespace \
             -f helm/values.yaml \
-            --timeout 40m \
+            --timeout 90m \
             --wait
 
       - name: Check GitLab Pods
-        run: kubectl get pods -n gitlab
+        if: always()
+        run: |
+          kubectl get pods -n gitlab -o wide
+
+      - name: Describe GitLab Pods
+        if: always()
+        run: |
+          kubectl describe pods -n gitlab
+
+      - name: Get Failed Pod Logs
+        if: always()
+        run: |
+          for pod in $(kubectl get pods -n gitlab --no-headers | awk '$3!="Running" && $3!="Completed" {print $1}'); do
+            echo "========== Logs for $pod =========="
+            kubectl logs $pod -n gitlab --all-containers=true || true
+          done
 
       - name: Check GitLab Services
-        run: kubectl get svc -n gitlab
+        if: always()
+        run: |
+          kubectl get svc -n gitlab
 
       - name: Check GitLab Ingress
-        run: kubectl get ingress -n gitlab
+        if: always()
+        run: |
+          kubectl get ingress -n gitlab
 
       - name: Apply Ingress
+        if: always()
         run: |
           if [ -f k8s/ingress.yaml ]; then
             kubectl apply -f k8s/ingress.yaml
