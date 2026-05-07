@@ -40,7 +40,8 @@ jobs:
         run: kubectl get nodes
 
       - name: Create Namespace
-        run: kubectl create namespace gitlab || true
+        run: |
+          kubectl create namespace gitlab --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Fetch Azure Resource Details
         run: |
@@ -89,12 +90,18 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl create secret generic gitlab-storage-secret \
-            --from-literal=key="$STORAGE_KEY" \
+            --from-literal=connection="DefaultEndpointsProtocol=https;AccountName=$STORAGE_ACCOUNT;AccountKey=$STORAGE_KEY;EndpointSuffix=core.windows.net" \
+            -n gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic gitlab-gitlab-initial-root-password \
+            --from-literal=password='GitlabRoot@123' \
             -n gitlab \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Install Helm
-        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Add GitLab Repo
         run: |
@@ -105,12 +112,19 @@ jobs:
         run: |
           helm upgrade --install gitlab gitlab/gitlab \
             --namespace gitlab \
+            --create-namespace \
             -f helm/values.yaml \
             --timeout 40m \
             --wait
 
       - name: Check GitLab Pods
         run: kubectl get pods -n gitlab
+
+      - name: Check GitLab Services
+        run: kubectl get svc -n gitlab
+
+      - name: Check GitLab Ingress
+        run: kubectl get ingress -n gitlab
 
       - name: Apply Ingress
         run: |
