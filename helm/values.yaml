@@ -21,14 +21,10 @@ global:
       secret: gitlab-postgres-secret
       key: password
 
-global:
   redis:
     host: gitlab-redis-aks-001.redis.cache.windows.net
     port: 6380
     scheme: rediss
-    password:
-      secret: gitlab-redis-secret
-      key: password
 
   appConfig:
     object_store:
@@ -51,13 +47,13 @@ nginx-ingress:
   enabled: false
 
 prometheus:
-  install: false
+  enabled: false
 
 grafana:
   enabled: false
 
 gitlab-runner:
-  install: false
+  enabled: false
 
 registry:
   enabled: false
@@ -70,3 +66,8 @@ gitlab:
     backups:
       objectStorage:
         backend: azureRM
+
+  redis:
+    password:
+      secret: gitlab-redis-secret
+      key: password
