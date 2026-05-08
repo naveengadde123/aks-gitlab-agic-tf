@@ -38,6 +38,7 @@ jobs:
 
       - name: Verify AKS Cluster
         run: |
+          kubectl cluster-info
           kubectl get nodes
 
       - name: Create Namespace
@@ -119,6 +120,21 @@ jobs:
             --timeout 90m \
             --wait
 
+      # IMPORTANT FIX
+      - name: Reconnect AKS After Helm
+        if: always()
+        run: |
+          az aks get-credentials \
+            --resource-group rg-gitlab \
+            --name aks-gitlab-eip \
+            --overwrite-existing
+
+      - name: Verify Cluster Connection
+        if: always()
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
       - name: Check GitLab Pods
         if: always()
         run: |
@@ -151,5 +167,5 @@ jobs:
         if: always()
         run: |
           if [ -f k8s/ingress.yaml ]; then
-            kubectl apply -f k8s/ingress.yaml
+            kubectl apply -f k8s/ingress.yaml --validate=false
           fi
