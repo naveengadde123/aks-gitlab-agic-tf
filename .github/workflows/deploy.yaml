@@ -111,6 +111,32 @@ jobs:
           helm repo add gitlab https://charts.gitlab.io
           helm repo update
 
+      # IMPORTANT FIX
+      - name: Cleanup Old GitLab Release
+        run: |
+          helm uninstall gitlab -n gitlab || true
+          kubectl delete namespace gitlab --ignore-not-found=true
+          sleep 30
+          kubectl create namespace gitlab
+
+      - name: Recreate Kubernetes Secrets
+        run: |
+          kubectl create secret generic gitlab-postgres-secret \
+            --from-literal=password='P@ssw0rd123!Gitlab' \
+            -n gitlab
+
+          kubectl create secret generic gitlab-redis-secret \
+            --from-literal=password="$REDIS_KEY" \
+            -n gitlab
+
+          kubectl create secret generic gitlab-storage-secret \
+            --from-literal=connection="DefaultEndpointsProtocol=https;AccountName=$STORAGE_ACCOUNT;AccountKey=$STORAGE_KEY;EndpointSuffix=core.windows.net" \
+            -n gitlab
+
+          kubectl create secret generic gitlab-gitlab-initial-root-password \
+            --from-literal=password='GitlabRoot@123' \
+            -n gitlab
+
       - name: Install GitLab
         run: |
           helm upgrade --install gitlab gitlab/gitlab \
@@ -120,7 +146,6 @@ jobs:
             --timeout 90m \
             --wait
 
-      # IMPORTANT FIX
       - name: Reconnect AKS After Helm
         if: always()
         run: |
