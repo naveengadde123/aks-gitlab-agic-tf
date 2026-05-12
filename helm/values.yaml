@@ -3,9 +3,11 @@ global:
 
   hosts:
     domain: gitlab.local.com
+    externalIP: "${EXTERNAL_IP}"
     https: false
 
   ingress:
+    enabled: true
     class: azure-application-gateway
     configureCertmanager: false
 
@@ -36,6 +38,14 @@ global:
         secret: gitlab-storage-secret
         key: connection
 
+    backups:
+      bucket: gitlab-backups
+      tmpBucket: gitlab-tmp
+
+certmanager:
+  install: false
+  installCRDs: false
+
 certmanager-issuer:
   enabled: false
 
@@ -49,25 +59,46 @@ nginx-ingress:
   enabled: false
 
 prometheus:
-  enabled: false
+  install: false
 
 grafana:
-  enabled: false
-
-gitlab-runner:
   enabled: false
 
 registry:
   enabled: false
 
-certmanager:
-  installCRDs: false
+gitlab-runner:
+  enabled: false
 
 gitlab:
-  kas:
-    enabled: false
+  webservice:
+    ingress:
+      enabled: true
+
+  sidekiq:
+    enabled: true
 
   toolbox:
+    enabled: true
+
     backups:
       objectStorage:
         backend: azureRM
+
+  kas:
+    enabled: false
+
+  gitaly:
+    persistence:
+      enabled: true
+      size: 20Gi
+
+  gitlab-shell:
+    service:
+      type: ClusterIP
+
+  migrations:
+    enabled: true
+
+  task-runner:
+    enabled: true

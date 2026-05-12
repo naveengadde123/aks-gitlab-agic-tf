@@ -41,6 +41,18 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
+      # NEW FIX
+      - name: Get Application Gateway Public IP
+        run: |
+          PUBLIC_IP=$(az network public-ip list \
+            --resource-group rg-gitlab \
+            --query "[0].ipAddress" \
+            -o tsv)
+
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
+          echo "Application Gateway Public IP: $PUBLIC_IP"
+
       - name: Create Namespace
         run: |
           kubectl create namespace gitlab \
@@ -111,7 +123,6 @@ jobs:
           helm repo add gitlab https://charts.gitlab.io
           helm repo update
 
-      # IMPORTANT FIX
       - name: Cleanup Old GitLab Release
         run: |
           helm uninstall gitlab -n gitlab || true
@@ -137,12 +148,15 @@ jobs:
             --from-literal=password='GitlabRoot@123' \
             -n gitlab
 
+      # UPDATED HELM INSTALL
       - name: Install GitLab
         run: |
           helm upgrade --install gitlab gitlab/gitlab \
             --namespace gitlab \
             --create-namespace \
             -f helm/values.yaml \
+            --set global.hosts.domain=nip.io \
+            --set global.hosts.externalIP=$PUBLIC_IP \
             --timeout 90m \
             --wait
 
