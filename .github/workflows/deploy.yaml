@@ -41,18 +41,6 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
-      # NEW FIX
-      - name: Get Application Gateway Public IP
-        run: |
-          PUBLIC_IP=$(az network public-ip list \
-            --resource-group rg-gitlab \
-            --query "[0].ipAddress" \
-            -o tsv)
-
-          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
-
-          echo "Application Gateway Public IP: $PUBLIC_IP"
-
       - name: Create Namespace
         run: |
           kubectl create namespace gitlab \
@@ -92,6 +80,17 @@ jobs:
           echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
           echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
 
+      - name: Cleanup Old GitLab Release
+        run: |
+          helm uninstall gitlab -n gitlab || true
+          kubectl delete namespace gitlab --ignore-not-found=true
+
+          echo "Waiting for namespace deletion..."
+          sleep 60
+
+          kubectl create namespace gitlab \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Create Kubernetes Secrets
         run: |
           kubectl create secret generic gitlab-postgres-secret \
@@ -123,42 +122,21 @@ jobs:
           helm repo add gitlab https://charts.gitlab.io
           helm repo update
 
-      - name: Cleanup Old GitLab Release
-        run: |
-          helm uninstall gitlab -n gitlab || true
-          kubectl delete namespace gitlab --ignore-not-found=true
-          sleep 30
-          kubectl create namespace gitlab
-
-      - name: Recreate Kubernetes Secrets
-        run: |
-          kubectl create secret generic gitlab-postgres-secret \
-            --from-literal=password='P@ssw0rd123!Gitlab' \
-            -n gitlab
-
-          kubectl create secret generic gitlab-redis-secret \
-            --from-literal=password="$REDIS_KEY" \
-            -n gitlab
-
-          kubectl create secret generic gitlab-storage-secret \
-            --from-literal=connection="DefaultEndpointsProtocol=https;AccountName=$STORAGE_ACCOUNT;AccountKey=$STORAGE_KEY;EndpointSuffix=core.windows.net" \
-            -n gitlab
-
-          kubectl create secret generic gitlab-gitlab-initial-root-password \
-            --from-literal=password='GitlabRoot@123' \
-            -n gitlab
-
-      # UPDATED HELM INSTALL
       - name: Install GitLab
         run: |
           helm upgrade --install gitlab gitlab/gitlab \
             --namespace gitlab \
             --create-namespace \
             -f helm/values.yaml \
-            --set global.hosts.domain=nip.io \
-            --set global.hosts.externalIP=$PUBLIC_IP \
             --timeout 90m \
             --wait
+
+      - name: Wait For GitLab Pods
+        run: |
+          kubectl wait --for=condition=Ready pods \
+            --all \
+            -n gitlab \
+            --timeout=1800s || true
 
       - name: Reconnect AKS After Helm
         if: always()
@@ -202,9 +180,9 @@ jobs:
         run: |
           kubectl get ingress -n gitlab
 
-      - name: Apply Ingress
+      - name: Get GitLab Root Password
         if: always()
         run: |
-          if [ -f k8s/ingress.yaml ]; then
-            kubectl apply -f k8s/ingress.yaml --validate=false
-          fi
+          kubectl get secret gitlab-gitlab-initial-root-password \
+            -n gitlab \
+            -o jsonpath="{.data.password}" | base64 -d || true

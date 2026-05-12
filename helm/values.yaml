@@ -2,7 +2,7 @@ global:
   edition: ce
 
   hosts:
-    domain: gitlab.local.com
+    domain: nip.io
     https: false
 
   ingress:
@@ -25,22 +25,17 @@ global:
     host: gitlab-redis-aks-001.redis.cache.windows.net
     port: 6380
     scheme: rediss
+
+    auth:
+      enabled: true
+
     password:
       secret: gitlab-redis-secret
       key: password
 
   appConfig:
     object_store:
-      enabled: true
-      connection:
-        secret: gitlab-storage-secret
-        key: connection
-
-certmanager-issuer:
-  enabled: false
-
-certmanager:
-  installCRDs: false
+      enabled: false
 
 postgresql:
   install: false
@@ -52,22 +47,20 @@ nginx-ingress:
   enabled: false
 
 prometheus:
-  enabled: false
+  install: false
 
 grafana:
   enabled: false
 
 gitlab-runner:
-  enabled: false
+  install: false
 
 registry:
   enabled: false
 
+certmanager:
+  install: false
+
 gitlab:
   kas:
     enabled: false
-
-  toolbox:
-    backups:
-      objectStorage:
-        backend: azureRM
