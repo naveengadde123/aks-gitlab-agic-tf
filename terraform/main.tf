@@ -260,50 +260,16 @@ resource "azurerm_role_assignment" "agic_contributor" {
 }
 
 # -------------------------
-# Outputs
+# AGIC Role Assignments
 # -------------------------
-output "aks_cluster_id" {
-  value       = azurerm_kubernetes_cluster.aks.id
-  description = "AKS Cluster ID"
+resource "azurerm_role_assignment" "agic_reader" {
+  scope              = azurerm_application_gateway.appgw.id
+  role_definition_name = "Reader"
+  principal_id       = azurerm_kubernetes_cluster.aks.ingress_application_gateway[0].identity[0].principal_id
 }
 
-output "aks_cluster_name" {
-  value       = azurerm_kubernetes_cluster.aks.name
-  description = "AKS Cluster Name"
-}
-
-output "app_gateway_public_ip" {
-  value       = azurerm_public_ip.appgw_pip.ip_address
-  description = "Application Gateway Public IP"
-}
-
-output "postgresql_fqdn" {
-  value       = azurerm_postgresql_flexible_server.pg.fqdn
-  description = "PostgreSQL Fully Qualified Domain Name"
-  sensitive   = true
-}
-
-output "postgresql_username" {
-  value       = azurerm_postgresql_flexible_server.pg.administrator_login
-  description = "PostgreSQL Administrator Username"
-}
-
-output "redis_hostname" {
-  value       = azurerm_redis_cache.redis.hostname
-  description = "Redis Cache Hostname"
-}
-
-output "redis_port" {
-  value       = azurerm_redis_cache.redis.port
-  description = "Redis Cache Port"
-}
-
-output "storage_account_name" {
-  value       = azurerm_storage_account.storage.name
-  description = "Storage Account Name"
-}
-
-output "resource_group_name" {
-  value       = azurerm_resource_group.rg.name
-  description = "Resource Group Name"
+resource "azurerm_role_assignment" "agic_contributor" {
+  scope              = azurerm_resource_group.rg.id
+  role_definition_name = "Contributor"
+  principal_id       = azurerm_kubernetes_cluster.aks.ingress_application_gateway[0].identity[0].principal_id
 }
