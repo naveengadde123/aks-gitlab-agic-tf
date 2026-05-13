@@ -25,6 +25,10 @@ global:
     host: gitlab-redis-aks.redis.cache.windows.net
     port: 6380
     scheme: rediss
+
+    auth:
+      enabled: true
+
     password:
       secret: gitlab-redis-secret
       key: password
@@ -32,6 +36,7 @@ global:
   appConfig:
     object_store:
       enabled: true
+
       connection:
         secret: gitlab-storage-secret
         key: connection
@@ -54,21 +59,35 @@ prometheus:
 grafana:
   enabled: false
 
+registry:
+  enabled: false
+
 gitlab-runner:
   install: false
 
-registry:
+gitlab-exporter:
   enabled: false
 
 gitlab:
   kas:
     enabled: false
 
-  webservice:
-    ingress:
-      enabled: false
+  sidekiq:
+    replicas: 1
+
+  gitlab-shell:
+    replicas: 1
 
   toolbox:
+    replicas: 1
+
     backups:
       objectStorage:
         backend: azureRM
+
+  webservice:
+    minReplicas: 1
+    maxReplicas: 1
+
+    ingress:
+      enabled: false
