@@ -13,22 +13,27 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      # Azure Login
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Terraform Setup
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
+      # Terraform Init
       - name: Terraform Init
         working-directory: terraform
         run: terraform init
 
+      # Terraform Apply
       - name: Terraform Apply
         working-directory: terraform
         run: terraform apply -auto-approve
 
+      # Get AKS Credentials
       - name: Get AKS Credentials
         run: |
           az aks get-credentials \
@@ -36,16 +41,19 @@ jobs:
             --name aks-gitlab-eip \
             --overwrite-existing
 
+      # Verify Cluster
       - name: Verify AKS Cluster
         run: |
           kubectl cluster-info
           kubectl get nodes
 
+      # Create Namespace
       - name: Create Namespace
         run: |
           kubectl create namespace gitlab \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # Fetch Application Gateway Public IP
       - name: Get Application Gateway Public IP
         run: |
           PUBLIC_IP=$(az network public-ip list \
@@ -57,6 +65,7 @@ jobs:
 
           echo "PUBLIC_IP=$PUBLIC_IP"
 
+      # Fetch Azure Resource Details
       - name: Fetch Azure Resource Details
         run: |
           POSTGRES_HOST=$(az postgres flexible-server list \
@@ -91,10 +100,11 @@ jobs:
           echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
           echo "STORAGE_KEY=$STORAGE_KEY" >> $GITHUB_ENV
 
+      # Create Kubernetes Secrets
       - name: Create Kubernetes Secrets
         run: |
           kubectl create secret generic gitlab-postgres-secret \
-            --from-literal=password="${{ secrets.POSTGRES_PASSWORD }}" \
+            --from-literal=password="P@ssw0rd123!Gitlab" \
             -n gitlab \
             --dry-run=client -o yaml | kubectl apply -f -
 
@@ -109,19 +119,22 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
           kubectl create secret generic gitlab-gitlab-initial-root-password \
-            --from-literal=password='GitlabRoot@123' \
+            --from-literal=password="GitlabRoot@123" \
             -n gitlab \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      # Install Helm
       - name: Install Helm
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
+      # Add GitLab Helm Repo
       - name: Add GitLab Repo
         run: |
           helm repo add gitlab https://charts.gitlab.io
           helm repo update
 
+      # Install GitLab
       - name: Install GitLab
         run: |
           helm upgrade --install gitlab gitlab/gitlab \
@@ -132,15 +145,28 @@ jobs:
             --timeout 90m \
             --wait
 
+      # Apply Ingress
       - name: Apply Ingress
         run: |
           sed -i "s/<EXTERNAL-IP>/$PUBLIC_IP/g" k8s/ingress.yaml
           kubectl apply -f k8s/ingress.yaml
 
+      # Check GitLab Pods
       - name: Check Pods
         run: |
-          kubectl get pods -n gitlab
+          kubectl get pods -n gitlab -o wide
 
+      # Check Services
+      - name: Check Services
+        run: |
+          kubectl get svc -n gitlab
+
+      # Check Ingress
+      - name: Check Ingress
+        run: |
+          kubectl get ingress -n gitlab
+
+      # Get GitLab Root Password
       - name: Get Root Password
         run: |
           kubectl get secret gitlab-gitlab-initial-root-password \
