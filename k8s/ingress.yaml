@@ -4,28 +4,12 @@ metadata:
   name: gitlab-ingress
   namespace: gitlab
   annotations:
-    kubernetes.io/ingress.class: "azure-application-gateway"
-    appgw.ingress.kubernetes.io/backend-protocol: "http"
-    appgw.ingress.kubernetes.io/ssl-redirect: "false"
-
+    kubernetes.io/ingress.class: azure-application-gateway
 spec:
   ingressClassName: azure-application-gateway
 
   rules:
-    # Main GitLab web interface
-    - host: "gitlab.nip.io"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: gitlab-webservice-default
-                port:
-                  number: 8181
-
-    # Alternative host pattern using IP-based
-    - host: ""
+    - host: gitlab.<EXTERNAL-IP>.nip.io
       http:
         paths:
           - path: /
