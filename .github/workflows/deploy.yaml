@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout Repository
       - name: Checkout Code
         uses: actions/checkout@v3
 
@@ -19,7 +20,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Terraform Setup
+      # Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
@@ -41,19 +42,19 @@ jobs:
             --name aks-gitlab-eip \
             --overwrite-existing
 
-      # Verify Cluster
+      # Verify AKS Cluster
       - name: Verify AKS Cluster
         run: |
           kubectl cluster-info
-          kubectl get nodes
+          kubectl get nodes -o wide
 
-      # Create Namespace
+      # Create GitLab Namespace
       - name: Create Namespace
         run: |
           kubectl create namespace gitlab \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      # Fetch Application Gateway Public IP
+      # Fetch Public IP
       - name: Get Application Gateway Public IP
         run: |
           PUBLIC_IP=$(az network public-ip list \
@@ -63,36 +64,42 @@ jobs:
 
           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
 
-          echo "PUBLIC_IP=$PUBLIC_IP"
+          echo "Public IP: $PUBLIC_IP"
 
       # Fetch Azure Resource Details
       - name: Fetch Azure Resource Details
         run: |
           POSTGRES_HOST=$(az postgres flexible-server list \
             --resource-group rg-gitlab \
-            --query "[0].fullyQualifiedDomainName" -o tsv)
+            --query "[0].fullyQualifiedDomainName" \
+            -o tsv)
 
           REDIS_NAME=$(az redis list \
             --resource-group rg-gitlab \
-            --query "[0].name" -o tsv)
+            --query "[0].name" \
+            -o tsv)
 
           REDIS_HOST=$(az redis list \
             --resource-group rg-gitlab \
-            --query "[0].hostName" -o tsv)
+            --query "[0].hostName" \
+            -o tsv)
 
           REDIS_KEY=$(az redis list-keys \
             --name $REDIS_NAME \
             --resource-group rg-gitlab \
-            --query "primaryKey" -o tsv)
+            --query "primaryKey" \
+            -o tsv)
 
           STORAGE_ACCOUNT=$(az storage account list \
             --resource-group rg-gitlab \
-            --query "[0].name" -o tsv)
+            --query "[0].name" \
+            -o tsv)
 
           STORAGE_KEY=$(az storage account keys list \
             --account-name $STORAGE_ACCOUNT \
             --resource-group rg-gitlab \
-            --query "[0].value" -o tsv)
+            --query "[0].value" \
+            -o tsv)
 
           echo "POSTGRES_HOST=$POSTGRES_HOST" >> $GITHUB_ENV
           echo "REDIS_HOST=$REDIS_HOST" >> $GITHUB_ENV
@@ -128,7 +135,7 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-      # Add GitLab Helm Repo
+      # Add GitLab Helm Repository
       - name: Add GitLab Repo
         run: |
           helm repo add gitlab https://charts.gitlab.io
@@ -142,8 +149,12 @@ jobs:
             --create-namespace \
             -f helm/values.yaml \
             --set global.hosts.domain="$PUBLIC_IP.nip.io" \
-            --timeout 90m \
-            --wait
+            --timeout 120m
+
+      # Wait for Pods
+      - name: Wait For GitLab Pods
+        run: |
+          sleep 180
 
       # Apply Ingress
       - name: Apply Ingress
@@ -151,10 +162,25 @@ jobs:
           sed -i "s/<EXTERNAL-IP>/$PUBLIC_IP/g" k8s/ingress.yaml
           kubectl apply -f k8s/ingress.yaml
 
-      # Check GitLab Pods
+      # Check Pods
       - name: Check Pods
         run: |
           kubectl get pods -n gitlab -o wide
+
+      # Describe Failed Pods
+      - name: Describe Failed Pods
+        run: |
+          kubectl describe pods -n gitlab || true
+
+      # Get Failed Pod Logs
+      - name: Get Failed Pod Logs
+        run: |
+          for pod in $(kubectl get pods -n gitlab --no-headers | awk '$3!="Running" && $3!="Completed" {print $1}'); do
+            echo "===================="
+            echo "Logs for $pod"
+            echo "===================="
+            kubectl logs $pod -n gitlab --all-containers=true || true
+          done
 
       # Check Services
       - name: Check Services
@@ -166,9 +192,15 @@ jobs:
         run: |
           kubectl get ingress -n gitlab
 
-      # Get GitLab Root Password
+      # Get Root Password
       - name: Get Root Password
         run: |
           kubectl get secret gitlab-gitlab-initial-root-password \
             -n gitlab \
             -o jsonpath="{.data.password}" | base64 -d
+
+      # Print GitLab URL
+      - name: GitLab URL
+        run: |
+          echo "GitLab URL:"
+          echo "http://gitlab.$PUBLIC_IP.nip.io"

@@ -1,7 +1,7 @@
 variable "location" {
-  description = "Azure region"
+  description = "Azure Region"
   type        = string
-  default     = "East US"
+  default     = "eastus"
 }
 
 variable "resource_group_name" {
@@ -17,13 +17,13 @@ variable "aks_name" {
 }
 
 variable "postgres_admin_username" {
-  description = "PostgreSQL admin username"
+  description = "PostgreSQL Admin Username"
   type        = string
   default     = "gitlabadmin"
 }
 
 variable "postgres_admin_password" {
-  description = "PostgreSQL admin password"
+  description = "PostgreSQL Admin Password"
   type        = string
   sensitive   = true
   default     = "P@ssw0rd123!Gitlab"
