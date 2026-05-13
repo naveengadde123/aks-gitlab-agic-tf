@@ -1,0 +1,133 @@
+# =====================================
+# Example Terraform Variables Override File
+# =====================================
+# 
+# Copy this file to terraform.tfvars and customize values as needed
+# This file will override defaults in variables.tf
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   terraform plan -var-file="terraform.tfvars"
+#
+
+# -------------------------
+# Azure Configuration
+# -------------------------
+# azure_region = "centralindia"
+# resource_group_name = "rg-gitlab"
+
+# -------------------------
+# AKS Configuration
+# -------------------------
+# aks_cluster_name = "aks-gitlab-eip"
+# aks_node_count = 2
+# aks_vm_size = "Standard_D2s_v3"
+
+# Customize for different workloads:
+# - Development:  aks_vm_size = "Standard_B2s", aks_node_count = 1
+# - Production:   aks_vm_size = "Standard_D4s_v3", aks_node_count = 3+
+# - High-traffic: aks_vm_size = "Standard_D8s_v3", aks_node_count = 5+
+
+# -------------------------
+# Application Gateway Configuration
+# -------------------------
+# app_gateway_name = "gitlab-appgw"
+# app_gateway_sku_name = "Standard_v2"
+# app_gateway_capacity = 1
+
+# For production with WAF:
+# app_gateway_sku_name = "WAF_v2"
+
+# -------------------------
+# PostgreSQL Configuration
+# -------------------------
+# postgresql_server_name_prefix = "gitlab-postgres"
+# postgresql_version = "13"
+# postgresql_admin_password = "P@ssw0rd123!Gitlab"
+# postgresql_storage_mb = 32768
+
+# SKU options:
+# - Development:  "B_Standard_B1ms" (default, 1 vCPU, 1 GB RAM)
+# - Medium:       "B_Standard_B2s" (2 vCPU, 4 GB RAM)
+# - Production:   "D_Standard_D2s_v3" (2 vCPU, 8 GB RAM)
+# - High-traffic: "D_Standard_D4s_v3" (4 vCPU, 16 GB RAM)
+
+# postgresql_sku_name = "B_Standard_B1ms"
+
+# -------------------------
+# Redis Configuration
+# -------------------------
+# redis_name_prefix = "gitlab-redis-aks"
+# redis_capacity = 1
+# redis_family = "C"
+# redis_sku_name = "Basic"
+
+# Redis capacity options:
+# - Development:  0.25 GB (Basic)
+# - Small:        1 GB (Basic, default)
+# - Medium:       2 GB (Basic)
+# - Production:   6 GB (Premium for HA)
+# - High-traffic: 26 GB (Premium)
+
+# -------------------------
+# Storage Account Configuration
+# -------------------------
+# storage_account_name_prefix = "gitlabsa"
+# storage_account_tier = "Standard"
+# storage_account_replication_type = "LRS"
+
+# Replication options:
+# - LRS: Locally Redundant (default, cost-effective)
+# - GRS: Geo-Redundant (disaster recovery)
+# - RAGRS: Read-Access Geo-Redundant (HA + read access)
+# - ZRS: Zone-Redundant (within same region)
+
+# -------------------------
+# GitLab Configuration
+# -------------------------
+# gitlab_edition = "ce"
+# gitlab_root_password = "GitlabRoot@123"
+
+# -------------------------
+# Tags
+# -------------------------
+# environment_tags = {
+#   Environment = "production"
+#   Project     = "GitLab"
+#   ManagedBy   = "Terraform"
+#   CostCenter  = "Engineering"
+#   Owner       = "DevOps"
+# }
+
+# =====================================
+# Common Scenarios
+# =====================================
+
+# --- SCENARIO 1: Development Environment ---
+# azure_region = "centralindia"
+# resource_group_name = "rg-gitlab-dev"
+# aks_node_count = 1
+# aks_vm_size = "Standard_B2s"
+# postgresql_sku_name = "B_Standard_B1ms"
+# redis_capacity = 0.25
+# storage_account_replication_type = "LRS"
+
+# --- SCENARIO 2: Small Production ---
+# azure_region = "centralindia"
+# resource_group_name = "rg-gitlab-prod"
+# aks_node_count = 2
+# aks_vm_size = "Standard_D2s_v3"
+# postgresql_sku_name = "B_Standard_B2s"
+# redis_capacity = 2
+# storage_account_replication_type = "GRS"
+
+# --- SCENARIO 3: High-Traffic Production ---
+# azure_region = "centralindia"
+# resource_group_name = "rg-gitlab-prod"
+# aks_node_count = 5
+# aks_vm_size = "Standard_D4s_v3"
+# app_gateway_capacity = 3
+# postgresql_sku_name = "D_Standard_D4s_v3"
+# redis_capacity = 13
+# redis_sku_name = "Premium"
+# storage_account_replication_type = "RAGRS"

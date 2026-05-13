@@ -1,61 +1,102 @@
 global:
   edition: ce
-
+  
+  # Expose GitLab via public IP from App Gateway
   hosts:
     domain: nip.io
-    externalIP: ""
+    externalIP: ""  # Set by Helm during deployment
     https: false
+    tls:
+      enabled: false
 
   ingress:
     enabled: true
     class: azure-application-gateway
     configureCertmanager: false
+    annotations:
+      appgw.ingress.kubernetes.io/backend-protocol: "http"
+      appgw.ingress.kubernetes.io/ssl-redirect: "false"
 
+  # Disable built-in MinIO (use external storage if needed)
   minio:
     enabled: false
 
+  # External PostgreSQL Configuration
   psql:
-    host: gitlab-postgres.postgres.database.azure.com
+    host: gitlab-postgres.postgres.database.azure.com  # Will be replaced by terraform output
     port: 5432
     username: gitlabadmin
     database: gitlabhq_production
     password:
       secret: gitlab-postgres-secret
       key: password
+    sslmode: require
 
+  # External Redis Configuration
   redis:
-    host: gitlab-redis-aks-001.redis.cache.windows.net
-    port: 6380
-    scheme: rediss
+    host: gitlab-redis-aks-001.redis.cache.windows.net  # Will be replaced by terraform output
+    port: 6379  # Basic tier Redis uses 6379 (no SSL)
+    scheme: redis  # Use redis:// not rediss:// for Basic tier
     password:
       secret: gitlab-redis-secret
       key: password
 
+  # Disable object storage for now
   appConfig:
     object_store:
       enabled: false
 
+# Disable built-in PostgreSQL (using external)
 postgresql:
   install: false
 
+# Disable built-in Redis (using external)
 redis:
   install: false
 
+# Disable built-in nginx-ingress (using AGIC)
 nginx-ingress:
   enabled: false
 
+# Disable Prometheus monitoring
 prometheus:
   install: false
 
+# Disable Grafana
 grafana:
   enabled: false
 
+# Disable GitLab Runner
 gitlab-runner:
   install: false
 
+# Disable built-in Docker Registry
 registry:
   enabled: false
 
+# GitLab specific configuration
 gitlab:
+  # Disable KAS (Kubernetes Agent Server)
   kas:
     enabled: false
+  
+  # Webservice configuration
+  webservice:
+    replicaCount: 2
+    resources:
+      requests:
+        memory: 1.5Gi
+        cpu: 500m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+  
+  # Unicorn/Puma configuration
+  unicorn:
+    workerProcesses: 2
+
+# Gitaly configuration for Git backend
+gitaly:
+  enabled: true
+  persistence:
+    size: 10Gi

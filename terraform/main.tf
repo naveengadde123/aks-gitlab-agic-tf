@@ -18,7 +18,7 @@ provider "azurerm" {
 
 provider "random" {}
 
-# Random suffix for globally unique storage account name
+# Random suffix for globally unique resource names
 resource "random_string" "storage_suffix" {
   length  = 8
   special = false
@@ -26,73 +26,69 @@ resource "random_string" "storage_suffix" {
 }
 
 # -------------------------
-# Variables
-# -------------------------
-variable "postgresql_admin_password" {
-  description = "PostgreSQL administrator password"
-  type        = string
-  sensitive   = true
-  default     = "P@ssw0rd123!Gitlab"
-}
-
-# -------------------------
 # Resource Group
 # -------------------------
 resource "azurerm_resource_group" "rg" {
-  name     = "rg-gitlab"
-  location = "central india"
+  name     = var.resource_group_name
+  location = var.azure_region
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # Virtual Network
 # -------------------------
 resource "azurerm_virtual_network" "vnet" {
-  name                = "aks-vnet"
-  address_space       = ["10.0.0.0/8"]
+  name                = var.vnet_name
+  address_space       = var.vnet_address_space
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # Subnets
 # -------------------------
 resource "azurerm_subnet" "aks_subnet" {
-  name                 = "aks-subnet"
+  name                 = var.aks_subnet_name
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.240.0.0/16"]
+  address_prefixes     = var.aks_subnet_prefix
 }
 
 resource "azurerm_subnet" "appgw_subnet" {
-  name                 = "appgw-subnet"
+  name                 = var.appgw_subnet_name
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.241.0.0/16"]
+  address_prefixes     = var.appgw_subnet_prefix
 }
 
 # -------------------------
 # Public IP for App Gateway
 # -------------------------
 resource "azurerm_public_ip" "appgw_pip" {
-  name                = "appgw-pip"
+  name                = var.app_gateway_pip_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # Application Gateway (FIXED)
 # -------------------------
 resource "azurerm_application_gateway" "appgw" {
-  name                = "gitlab-appgw"
+  name                = var.app_gateway_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
   sku {
-    name     = "Standard_v2"
-    tier     = "Standard_v2"
-    capacity = 1
+    name     = var.app_gateway_sku_name
+    tier     = var.app_gateway_sku_tier
+    capacity = var.app_gateway_capacity
   }
 
   gateway_ip_configuration {
@@ -142,21 +138,23 @@ resource "azurerm_application_gateway" "appgw" {
     policy_type = "Predefined"
     policy_name = "AppGwSslPolicy20220101"
   }
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # AKS Cluster with AGIC
 # -------------------------
 resource "azurerm_kubernetes_cluster" "aks" {
-  name                = "aks-gitlab-eip"
+  name                = var.aks_cluster_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  dns_prefix          = "gitlabaks"
+  dns_prefix          = var.aks_dns_prefix
 
   default_node_pool {
-    name           = "agentpool"
-    node_count     = 2
-    vm_size        = "Standard_D2s_v3"
+    name           = var.aks_node_pool_name
+    node_count     = var.aks_node_count
+    vm_size        = var.aks_vm_size
     vnet_subnet_id = azurerm_subnet.aks_subnet.id
   }
 
@@ -171,38 +169,44 @@ resource "azurerm_kubernetes_cluster" "aks" {
   ingress_application_gateway {
     gateway_id = azurerm_application_gateway.appgw.id
   }
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # PostgreSQL (ADDED)
 # -------------------------
 resource "azurerm_postgresql_flexible_server" "pg" {
-  name                   = "gitlab-postgres-${random_string.storage_suffix.result}"
+  name                   = "${var.postgresql_server_name_prefix}-${random_string.storage_suffix.result}"
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
-  version                = "13"
+  version                = var.postgresql_version
 
-  administrator_login    = "gitlabadmin"
+  administrator_login    = var.postgresql_admin_login
   administrator_password = var.postgresql_admin_password
 
-  storage_mb = 32768
-  sku_name   = "B_Standard_B1ms"
+  storage_mb = var.postgresql_storage_mb
+  sku_name   = var.postgresql_sku_name
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres_vnet_link]
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # PostgreSQL Database
 resource "azurerm_postgresql_flexible_server_database" "gitlab_db" {
-  name       = "gitlabhq_production"
+  name       = var.postgresql_database_name
   server_id  = azurerm_postgresql_flexible_server.pg.id
-  charset    = "UTF8"
-  collation  = "en_US.utf8"
+  charset    = var.postgresql_database_charset
+  collation  = var.postgresql_database_collation
 }
 
 # Private DNS Zone for PostgreSQL
 resource "azurerm_private_dns_zone" "postgres" {
   name                = "postgres.database.azure.com"
   resource_group_name = azurerm_resource_group.rg.name
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "postgres_vnet_link" {
@@ -216,21 +220,90 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgres_vnet_link" {
 # Redis (ADDED)
 # -------------------------
 resource "azurerm_redis_cache" "redis" {
-  name                = "gitlab-redis-aks-${random_string.storage_suffix.result}"
+  name                = "${var.redis_name_prefix}-${random_string.storage_suffix.result}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  capacity            = 1
-  family              = "C"
-  sku_name            = "Basic"
+  capacity            = var.redis_capacity
+  family              = var.redis_family
+  sku_name            = var.redis_sku_name
+  enable_non_ssl_port = var.redis_enable_non_ssl_port
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
 }
 
 # -------------------------
 # Storage Account (ADDED)
 # -------------------------
 resource "azurerm_storage_account" "storage" {
-  name                     = "gitlabsa${random_string.storage_suffix.result}"
+  name                     = "${var.storage_account_name_prefix}${random_string.storage_suffix.result}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
+  account_tier             = var.storage_account_tier
+  account_replication_type = var.storage_account_replication_type
+  
+  tags = var.enable_resource_tags ? var.environment_tags : {}
+}
+
+# -------------------------
+# AGIC Role Assignments
+# -------------------------
+resource "azurerm_role_assignment" "agic_reader" {
+  scope              = azurerm_application_gateway.appgw.id
+  role_definition_name = "Reader"
+  principal_id       = azurerm_kubernetes_cluster.aks.ingress_application_gateway[0].identity[0].principal_id
+}
+
+resource "azurerm_role_assignment" "agic_contributor" {
+  scope              = azurerm_resource_group.rg.id
+  role_definition_name = "Contributor"
+  principal_id       = azurerm_kubernetes_cluster.aks.ingress_application_gateway[0].identity[0].principal_id
+}
+
+# -------------------------
+# Outputs
+# -------------------------
+output "aks_cluster_id" {
+  value       = azurerm_kubernetes_cluster.aks.id
+  description = "AKS Cluster ID"
+}
+
+output "aks_cluster_name" {
+  value       = azurerm_kubernetes_cluster.aks.name
+  description = "AKS Cluster Name"
+}
+
+output "app_gateway_public_ip" {
+  value       = azurerm_public_ip.appgw_pip.ip_address
+  description = "Application Gateway Public IP"
+}
+
+output "postgresql_fqdn" {
+  value       = azurerm_postgresql_flexible_server.pg.fqdn
+  description = "PostgreSQL Fully Qualified Domain Name"
+  sensitive   = true
+}
+
+output "postgresql_username" {
+  value       = azurerm_postgresql_flexible_server.pg.administrator_login
+  description = "PostgreSQL Administrator Username"
+}
+
+output "redis_hostname" {
+  value       = azurerm_redis_cache.redis.hostname
+  description = "Redis Cache Hostname"
+}
+
+output "redis_port" {
+  value       = azurerm_redis_cache.redis.port
+  description = "Redis Cache Port"
+}
+
+output "storage_account_name" {
+  value       = azurerm_storage_account.storage.name
+  description = "Storage Account Name"
+}
+
+output "resource_group_name" {
+  value       = azurerm_resource_group.rg.name
+  description = "Resource Group Name"
 }
