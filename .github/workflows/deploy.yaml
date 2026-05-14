@@ -48,11 +48,22 @@ jobs:
           kubectl cluster-info
           kubectl get nodes -o wide
 
-      # Create GitLab Namespace
+      # Clean Old GitLab Release
+      - name: Cleanup Old GitLab
+        run: |
+          helm uninstall gitlab -n gitlab || true
+          kubectl delete namespace gitlab --ignore-not-found=true
+
+          echo "Waiting for namespace deletion..."
+
+          while kubectl get namespace gitlab >/dev/null 2>&1; do
+            sleep 10
+          done
+
+      # Create Namespace
       - name: Create Namespace
         run: |
-          kubectl create namespace gitlab \
-            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace gitlab
 
       # Fetch Public IP
       - name: Get Application Gateway Public IP
@@ -151,10 +162,11 @@ jobs:
             --set global.hosts.domain="$PUBLIC_IP.nip.io" \
             --timeout 120m
 
-      # Wait for Pods
+      # Wait For Pods
       - name: Wait For GitLab Pods
         run: |
-          sleep 180
+          echo "Waiting for pods..."
+          sleep 300
 
       # Apply Ingress
       - name: Apply Ingress
@@ -167,40 +179,44 @@ jobs:
         run: |
           kubectl get pods -n gitlab -o wide
 
-      # Describe Failed Pods
-      - name: Describe Failed Pods
+      # Describe Pods
+      - name: Describe Pods
         run: |
           kubectl describe pods -n gitlab || true
 
-      # Get Failed Pod Logs
+      # Failed Pod Logs
       - name: Get Failed Pod Logs
         run: |
           for pod in $(kubectl get pods -n gitlab --no-headers | awk '$3!="Running" && $3!="Completed" {print $1}'); do
-            echo "===================="
-            echo "Logs for $pod"
-            echo "===================="
+            echo "================================="
+            echo "Logs for pod: $pod"
+            echo "================================="
+
             kubectl logs $pod -n gitlab --all-containers=true || true
           done
 
-      # Check Services
+      # Services
       - name: Check Services
         run: |
           kubectl get svc -n gitlab
 
-      # Check Ingress
+      # Ingress
       - name: Check Ingress
         run: |
           kubectl get ingress -n gitlab
 
-      # Get Root Password
+      # Root Password
       - name: Get Root Password
         run: |
+          echo ""
+          echo "GitLab Root Password:"
           kubectl get secret gitlab-gitlab-initial-root-password \
             -n gitlab \
             -o jsonpath="{.data.password}" | base64 -d
 
-      # Print GitLab URL
+      # GitLab URL
       - name: GitLab URL
         run: |
+          echo ""
           echo "GitLab URL:"
           echo "http://gitlab.$PUBLIC_IP.nip.io"

@@ -1,29 +1,22 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
-
 metadata:
   name: gitlab-ingress
   namespace: gitlab
-
   annotations:
     kubernetes.io/ingress.class: azure-application-gateway
-    appgw.ingress.kubernetes.io/backend-protocol: "http"
-    appgw.ingress.kubernetes.io/request-timeout: "300"
 
 spec:
   ingressClassName: azure-application-gateway
 
   rules:
     - host: gitlab.<EXTERNAL-IP>.nip.io
-
       http:
         paths:
           - path: /
             pathType: Prefix
-
             backend:
               service:
                 name: gitlab-webservice-default
-
                 port:
                   number: 8181

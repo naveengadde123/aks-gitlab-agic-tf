@@ -16,28 +16,18 @@ global:
     host: gitlab-postgres.postgres.database.azure.com
     port: 5432
     username: gitlabadmin
+    database: gitlabhq_production
     password:
       secret: gitlab-postgres-secret
       key: password
-    database: gitlabhq_production
 
   redis:
     host: gitlab-redis-aks.redis.cache.windows.net
     port: 6380
     scheme: rediss
-
-    auth:
-      enabled: true
+    password:
       secret: gitlab-redis-secret
       key: password
-
-  appConfig:
-    object_store:
-      enabled: true
-
-      connection:
-        secret: gitlab-storage-secret
-        key: connection
 
 postgresql:
   install: false
@@ -49,7 +39,8 @@ nginx-ingress:
   enabled: false
 
 certmanager:
-  installCRDs: false
+  install: false
+  enabled: false
 
 prometheus:
   install: false
@@ -77,51 +68,11 @@ gitlab:
     minReplicas: 1
     maxReplicas: 1
 
-    resources:
-      requests:
-        cpu: 250m
-        memory: 512Mi
-
-      limits:
-        cpu: 500m
-        memory: 1Gi
-
   sidekiq:
     replicas: 1
-
-    resources:
-      requests:
-        cpu: 250m
-        memory: 512Mi
-
-      limits:
-        cpu: 500m
-        memory: 1Gi
 
   gitlab-shell:
     replicas: 1
 
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-
-      limits:
-        cpu: 250m
-        memory: 512Mi
-
   toolbox:
     replicas: 1
-
-    backups:
-      objectStorage:
-        backend: azureRM
-
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-
-      limits:
-        cpu: 250m
-        memory: 512Mi
